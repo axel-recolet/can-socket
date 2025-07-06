@@ -1,0 +1,23 @@
+# Fichiers à ne jamais supprimer lors des nettoyages automatiques
+README.md
+LICENSE
+package.json
+tsconfig.json
+Cargo.toml
+src/
+tests/test-*.js
+tests/validate-*.js
+examples/
+docs/
+tools/
+scripts/
+
+# Fichiers temporaires de documentation
+*.md~
+*.sh~
+.DS_Store
+Thumbs.db
+
+# Archives
+archive/
+

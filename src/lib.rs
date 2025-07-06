@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use socketcan::{
-    CanError, CanFdFrame, CanFdSocket, CanFilter, CanFrame, CanSocket, EmbeddedFrame, ExtendedId,
-    Frame, Id, Socket, StandardId,
+    CanFdFrame, CanFdSocket, CanFilter, CanFrame, CanSocket, EmbeddedFrame, ExtendedId, Frame, Id,
+    Socket, SocketOptions, StandardId,
 };
 #[cfg(target_os = "linux")]
 use std::time::Duration;
@@ -74,8 +74,9 @@ impl CanSocketWrapper {
 
                 if is_remote {
                     // Create a remote frame using the correct DLC
-                    let frame = CanFrame::new_remote(can_id, data.len() as u8)
-                        .ok_or("Invalid remote frame")?;
+                    // Remote frames have no data payload, only request a specific DLC
+                    let dlc = if data.is_empty() { 0 } else { data.len() };
+                    let frame = CanFrame::new_remote(can_id, dlc).ok_or("Invalid remote frame")?;
                     socket.write_frame(&frame)?;
                 } else {
                     let frame = CanFrame::new(can_id, &data).ok_or("Invalid frame data")?;
@@ -199,32 +200,37 @@ impl CanSocketWrapper {
         &self,
         filters: Vec<(u32, u32, bool)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Convert filter tuples to CanFilter objects
+        // Convertir les filtres en format CanFilter
         let can_filters: Vec<CanFilter> = filters
             .into_iter()
-            .map(|(id, mask, extended)| {
-                let can_id = if extended {
-                    Id::Extended(ExtendedId::new(id).ok_or("Invalid extended CAN ID")?)
-                } else {
-                    Id::Standard(StandardId::new(id as u16).ok_or("Invalid standard CAN ID")?)
-                };
-                let mask_id = if extended {
-                    Id::Extended(ExtendedId::new(mask).ok_or("Invalid extended CAN mask")?)
-                } else {
-                    Id::Standard(StandardId::new(mask as u16).ok_or("Invalid standard CAN mask")?)
-                };
-                Ok(CanFilter::new(can_id, mask_id))
+            .map(|(id, mask, _extended)| {
+                // CanFilter::new prend directement des u32, pas des Id
+                CanFilter::new(id, mask)
             })
-            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+            .collect();
+
+        let filters = can_filters;
 
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters(&can_filters)?;
+                if filters.is_empty() {
+                    // Si aucun filtre, désactiver le filtrage
+                    socket.set_join_filters(false)?;
+                } else {
+                    // Appliquer les filtres spécifiques
+                    socket.set_filters(&filters)?;
+                }
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters(&can_filters)?;
+                if filters.is_empty() {
+                    // Si aucun filtre, désactiver le filtrage
+                    socket.set_join_filters(false)?;
+                } else {
+                    // Appliquer les filtres spécifiques
+                    socket.set_filters(&filters)?;
+                }
             }
         }
         Ok(())
@@ -235,11 +241,11 @@ impl CanSocketWrapper {
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters(&[])?;
+                socket.set_join_filters(false)?;
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters(&[])?;
+                socket.set_join_filters(false)?;
             }
         }
         Ok(())

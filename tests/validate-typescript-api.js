@@ -25,7 +25,7 @@ function test(name, fn) {
 
 // Test 1: Import via index.js (wrapper)
 test("Import via index.js wrapper", () => {
-  const SocketCAN = require("../index.js");
+  const SocketCAN = require("../dist/src/main.js");
   if (typeof SocketCAN !== "function") {
     throw new Error("SocketCAN is not a function");
   }
@@ -56,7 +56,7 @@ test("Types exportés disponibles", () => {
 
 // Test 4: Instantiation de SocketCAN
 test("Instantiation de SocketCAN", () => {
-  const SocketCAN = require("../index.js");
+  const SocketCAN = require("../dist/src/main.js");
   const can = new SocketCAN("vcan0");
 
   if (!can) {
@@ -70,7 +70,7 @@ test("Instantiation de SocketCAN", () => {
 
 // Test 5: Instantiation avec options
 test("Instantiation avec options CAN FD", () => {
-  const SocketCAN = require("../index.js");
+  const SocketCAN = require("../dist/src/main.js");
   const can = new SocketCAN("vcan0", { canFd: true });
 
   if (!can.canFd) {
@@ -80,7 +80,7 @@ test("Instantiation avec options CAN FD", () => {
 
 // Test 6: Méthodes disponibles
 test("Méthodes de base disponibles", () => {
-  const SocketCAN = require("../index.js");
+  const SocketCAN = require("../dist/src/main.js");
   const can = new SocketCAN("vcan0");
 
   const requiredMethods = ["open", "close", "send", "receive", "setFilters"];
