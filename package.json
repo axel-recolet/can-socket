@@ -1,0 +1,55 @@
+{
+  "name": "can-socket",
+  "version": "1.0.0",
+  "description": "Modern CAN bus socket interface for Node.js with TypeScript support. High-performance SocketCAN bindings built with Rust.",
+  "main": "dist/src/main.js",
+  "types": "dist/src/main.d.ts",
+  "scripts": {
+    "build": "cargo build --release && ./copy-native.sh release",
+    "build-debug": "cargo build && ./copy-native.sh debug",
+    "build-ts": "tsc",
+    "build-all": "npm run build-debug && npm run build-ts",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit",
+    "dev": "npm run build-debug && npm run build-ts",
+    "install": "npm run build",
+    "prepare": "npm run build-all",
+    "generate-js": "npm run build-ts && echo 'JavaScript API generated from TypeScript'",
+    "validate-api": "node tests/validate-typescript-api.js",
+    "docs-map": "node scripts/documentation-map.js",
+    "docs-check": "node scripts/check-documentation-consistency.js",
+    "backup-legacy": "mkdir -p legacy && cp *.js legacy/ 2>/dev/null || true && echo 'Legacy JS files backed up'",
+    "test": "node run-tests.js",
+    "test-single": "npm run build-all && node tests/test.js",
+    "test-legacy": "node tests/test.js",
+    "test-dev": "ts-node tests/validate-typescript-api.ts",
+    "example": "npm run build-all && node dist/src/exemple.js",
+    "example-legacy": "node exemple.js",
+    "example-dev": "ts-node src/exemple.ts"
+  },
+  "keywords": [
+    "can",
+    "socket",
+    "socketcan",
+    "canbus",
+    "automotive",
+    "typescript",
+    "linux",
+    "embedded",
+    "iot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@neon-rs/cli": "^0.1.82",
+    "@types/node": "^24.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "neon": "^2.0.0"
+  },
+  "neon": {
+    "type": "cargo"
+  }
+}

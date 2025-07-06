@@ -1,0 +1,66 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build SocketCAN Neon",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build-debug"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Build TypeScript",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build-ts"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Build All",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build-all"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"dependsOrder": "sequence",
+			"problemMatcher": [
+				"$rustc",
+				"$tsc"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Type Check",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"type-check"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"isBackground": false
+		}
+	]
+}

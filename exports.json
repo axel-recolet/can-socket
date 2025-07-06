@@ -1,0 +1,15 @@
+{
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/src/index.d.ts",
+            "import": "./dist/src/index.js",
+            "require": "./dist/src/index.js"
+        },
+        "./types": {
+            "types": "./dist/types/socketcan.d.ts",
+            "import": "./dist/types/socketcan.js",
+            "require": "./dist/types/socketcan.js"
+        }
+    }
+}
