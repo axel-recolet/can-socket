@@ -5,24 +5,31 @@
   "main": "dist/src/main.js",
   "types": "dist/src/main.d.ts",
   "scripts": {
+    "test:integration:jest": "jest --config jest.config.js tests/integration",
     "build": "cargo build --release && ./tools/copy-native.sh release",
     "build-debug": "cargo build && ./tools/copy-native.sh debug",
+    "build-optimized": "cp src/lib_optimized.rs src/lib.rs && cargo build --release --features optimized && ./tools/copy-native.sh release && git checkout src/lib.rs",
+    "build-optimized-debug": "cp src/lib_optimized.rs src/lib.rs && cargo build --features optimized && ./tools/copy-native.sh debug && git checkout src/lib.rs",
     "build-ts": "tsc",
     "build-all": "npm run build-debug && npm run build-ts",
+    "build-all-optimized": "npm run build-optimized && npm run build-ts",
+    "benchmark-neon": "npm run build-all-optimized && node dist/src/neon_optimization_benchmark.js",
     "clean": "rm -rf dist target/debug target/release",
     "type-check": "tsc --noEmit",
     "prepare": "npm run build-all",
     "test": "node tests/index.js",
     "test:core": "node tests/index.js --suite core",
     "test:advanced": "node tests/index.js --suite advanced",
-    "test:integration": "node tests/index.js --suite integration",
     "test:performance": "node tests/index.js --suite performance",
     "test:parallel": "node tests/index.js --parallel",
     "test:verbose": "node tests/index.js --verbose",
     "test:filter": "node tests/index.js --filter",
     "test:legacy": "node tests/run-tests-clean.js",
     "validate-api": "node tests/validate-typescript-api.js",
-    "example": "npm run build-all && node examples/exemple.js"
+    "example": "npm run build-all && node examples/exemple.js",
+    "test:unit": "jest",
+    "test:unit:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "can",
@@ -41,7 +48,10 @@
     "@neon-rs/cli": "^0.1.82",
     "@types/node": "^24.0.10",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
   },
   "dependencies": {
     "neon": "^2.0.0"

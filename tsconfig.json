@@ -29,8 +29,6 @@
     "exclude": [
         "node_modules",
         "dist",
-        "target",
-        "**/*.test.ts",
-        "**/*.spec.ts"
+        "target"
     ]
 }

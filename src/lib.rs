@@ -503,3 +503,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("closeSocket", close_socket)?;
     Ok(())
 }
+
+// Include test module
+#[cfg(test)]
+mod tests;

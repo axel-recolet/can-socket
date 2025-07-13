@@ -113,6 +113,26 @@ The project has been completely modernized and restructured:
 - [ ] **Project templates**: Starters for different use cases
 - [ ] **Community support**: Forum, Discord, GitHub Discussions
 
+### **3.4 Expose Native Rust Features** 🟡
+
+**Status**: 🟡 Planned  
+**Effort**: Medium  
+**Target Date**: October 2025
+
+**Tasks**:
+
+- [ ] **Support CAN-BCM**
+- [ ] **Support CAN-J1939**
+- [ ] **Blocking / non-blocking modes**
+- [ ] **Error and state frames**
+- [ ] **Low-level socket options** (loopback, drop_error_frames, broadcast reception)
+- [ ] **SO_TIMESTAMP timestamping**
+- [ ] **Advanced filters** (masks, multiple ranges)
+- [ ] **Full CAN-FD support** (64 bytes, CRC, bit-rate)
+- [ ] **Low-level conversions** (`sockaddr_can`, `can_frame`, ID encoding)
+- [ ] **Rust synchronous and Tokio async API**
+- [ ] **Granular Rust error handling**
+
 ## 🔮 Future Phase: Advanced Features (2026+)
 
 ### **4.1 Performance and Optimizations** 🔵

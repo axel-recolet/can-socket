@@ -169,10 +169,22 @@ export class SocketCAN extends EventEmitter {
       );
       return frame;
     } catch (error) {
+      // Check if this is a timeout error based on the error message
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      if (
+        errorMessage.toLowerCase().includes("timeout") ||
+        errorMessage.toLowerCase().includes("timed out") ||
+        errorMessage.toLowerCase().includes("operation would block")
+      ) {
+        throw new SocketCANError(
+          `Receive timeout after ${actualTimeout}ms`,
+          "RECEIVE_TIMEOUT"
+        );
+      }
+
       throw new SocketCANError(
-        `Error during receive: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        `Error during receive: ${errorMessage}`,
         "RECEIVE_ERROR"
       );
     }
@@ -468,6 +480,8 @@ export class SocketCAN extends EventEmitter {
             // Timeout is expected, continue listening
             continue;
           }
+          // Stop listening immediately on error
+          this._isListening = false;
           this.emit(
             "error",
             error instanceof SocketCANError
