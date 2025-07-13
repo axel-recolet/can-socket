@@ -7,32 +7,39 @@ mod tests {
 
     /// Test helper pour créer une interface virtuelle CAN
     #[cfg(target_os = "linux")]
-    fn setup_vcan_interface() -> String {
-        let interface = "vcan0"; // Utiliser interface existante
+    fn setup_vcan_interface_for_test(test_name: &str) -> String {
+        // Créer un nom d'interface unique basé sur le nom du test
+        let interface = format!("vcan_{}", test_name.replace("test_", ""));
 
         // Vérifier que l'interface existe et est active
         let output = std::process::Command::new("ip")
-            .args(&["link", "show", interface])
+            .args(&["link", "show", &interface])
             .output()
             .expect("Failed to check vcan interface");
 
         if !output.status.success() {
-            // Si vcan0 n'existe pas, essayer de la créer
+            // Si l'interface n'existe pas, essayer de la créer
             let create_output = std::process::Command::new("sudo")
-                .args(&["ip", "link", "add", "dev", interface, "type", "vcan"])
+                .args(&["ip", "link", "add", "dev", &interface, "type", "vcan"])
                 .output();
 
             if let Ok(create_result) = create_output {
                 if create_result.status.success() {
                     // Activer l'interface nouvellement créée
                     let _ = std::process::Command::new("sudo")
-                        .args(&["ip", "link", "set", "up", interface])
+                        .args(&["ip", "link", "set", "up", &interface])
                         .output();
                 }
             }
         }
 
-        interface.to_string()
+        interface
+    }
+
+    /// Test helper pour créer une interface virtuelle CAN (version simple)
+    #[cfg(target_os = "linux")]
+    fn setup_vcan_interface() -> String {
+        setup_vcan_interface_for_test("default")
     }
 
     #[cfg(target_os = "linux")]
@@ -202,7 +209,7 @@ mod tests {
         let receiver =
             CanSocketWrapper::new_fd(interface.clone()).expect("Failed to create FD receiver");
 
-        let test_id = 0x789;
+        let test_id = 0x123; // Valid 11-bit standard CAN ID
         let test_data = vec![
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
             0x0F, 0x10,
@@ -297,13 +304,9 @@ mod tests {
             "Should not receive frame that doesn't match filter"
         );
 
-        // Effacer tous les filtres - utiliser un filtre permettant tout
-        let all_filters = vec![(0x000, 0x000, false)]; // Filtre permettant tous les messages
-        let clear_result = receiver.set_filters(all_filters);
-        assert!(
-            clear_result.is_ok(),
-            "Should set permissive filters successfully"
-        );
+        // Effacer tous les filtres
+        let clear_result = receiver.clear_filters();
+        assert!(clear_result.is_ok(), "Should clear filters successfully");
 
         // Maintenant toutes les frames devraient être reçues
         let send_result = sender.send_frame(0x200, vec![0x05, 0x06], false, false, false);
@@ -354,7 +357,10 @@ mod tests {
             error_msg.to_lowercase().contains("timeout")
                 || error_msg.to_lowercase().contains("timed out")
                 || error_msg.to_lowercase().contains("would block")
-                || error_msg.to_lowercase().contains("no data"),
+                || error_msg.to_lowercase().contains("no data")
+                || error_msg
+                    .to_lowercase()
+                    .contains("resource temporarily unavailable"),
             "Error message should indicate timeout or no data available, got: {}",
             error_msg
         );

@@ -119,6 +119,9 @@ impl CanSocketWrapper {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
                 if let Some(timeout) = timeout_ms {
                     socket.set_read_timeout(Duration::from_millis(timeout))?;
+                } else {
+                    // Set to blocking mode if no timeout (very long timeout)
+                    socket.set_read_timeout(Duration::from_secs(3600))?;
                 }
 
                 let frame = socket.read_frame()?;
@@ -149,6 +152,9 @@ impl CanSocketWrapper {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
                 if let Some(timeout) = timeout_ms {
                     socket.set_read_timeout(Duration::from_millis(timeout))?;
+                } else {
+                    // Set to blocking mode if no timeout (very long timeout)
+                    socket.set_read_timeout(Duration::from_secs(3600))?;
                 }
 
                 // Read any frame (CAN or CAN FD)
@@ -209,27 +215,27 @@ impl CanSocketWrapper {
             })
             .collect();
 
-        let filters = can_filters;
-
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                if filters.is_empty() {
-                    // Si aucun filtre, désactiver le filtrage
-                    socket.set_join_filters(false)?;
+                if can_filters.is_empty() {
+                    // Si aucun filtre, utiliser un filtre qui accepte tout
+                    let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                    socket.set_filters(&accept_all)?;
                 } else {
                     // Appliquer les filtres spécifiques
-                    socket.set_filters(&filters)?;
+                    socket.set_filters(&can_filters)?;
                 }
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                if filters.is_empty() {
-                    // Si aucun filtre, désactiver le filtrage
-                    socket.set_join_filters(false)?;
+                if can_filters.is_empty() {
+                    // Si aucun filtre, utiliser un filtre qui accepte tout
+                    let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                    socket.set_filters(&accept_all)?;
                 } else {
                     // Appliquer les filtres spécifiques
-                    socket.set_filters(&filters)?;
+                    socket.set_filters(&can_filters)?;
                 }
             }
         }
@@ -241,11 +247,15 @@ impl CanSocketWrapper {
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_join_filters(false)?;
+                // Utiliser un filtre qui accepte tout (ID=0, Mask=0)
+                let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                socket.set_filters(&accept_all)?;
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_join_filters(false)?;
+                // Utiliser un filtre qui accepte tout (ID=0, Mask=0)
+                let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                socket.set_filters(&accept_all)?;
             }
         }
         Ok(())
