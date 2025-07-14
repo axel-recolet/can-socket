@@ -1,4 +1,5 @@
 use neon::prelude::*;
+use neon::types::buffer::TypedArray;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -218,47 +219,56 @@ impl CanSocketWrapper {
         &self,
         filters: Vec<(u32, u32, bool)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let can_filters: Result<Vec<CanFilter>, Box<dyn std::error::Error>> = filters
+        // Convertir les filtres en format CanFilter
+        let can_filters: Vec<CanFilter> = filters
             .into_iter()
-            .map(|(id, mask, extended)| {
-                if extended {
-                    Ok(CanFilter::new(id, mask))
-                } else {
-                    if id > 0x7FF {
-                        return Err(
-                            format!("Standard CAN ID {} exceeds 11-bit limit (0x7FF)", id).into(),
-                        );
-                    }
-                    Ok(CanFilter::new(id, mask))
-                }
+            .map(|(id, mask, _extended)| {
+                // CanFilter::new prend directement des u32, pas des Id
+                CanFilter::new(id, mask)
             })
             .collect();
-
-        let filters = can_filters?;
 
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters::<CanFilter>(&filters)?;
+                if can_filters.is_empty() {
+                    // Si aucun filtre, utiliser un filtre qui accepte tout
+                    let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                    socket.set_filters(&accept_all)?;
+                } else {
+                    // Appliquer les filtres spécifiques
+                    socket.set_filters(&can_filters)?;
+                }
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters::<CanFilter>(&filters)?;
+                if can_filters.is_empty() {
+                    // Si aucun filtre, utiliser un filtre qui accepte tout
+                    let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                    socket.set_filters(&accept_all)?;
+                } else {
+                    // Appliquer les filtres spécifiques
+                    socket.set_filters(&can_filters)?;
+                }
             }
         }
         Ok(())
     }
 
-    /// Clear all CAN filters
+    /// Clear all CAN filters (receive all frames)
     fn clear_filters(&self) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             CanSocketWrapper::Regular(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters::<CanFilter>(&[])?;
+                // Utiliser un filtre qui accepte tout (ID=0, Mask=0)
+                let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                socket.set_filters(&accept_all)?;
             }
             CanSocketWrapper::Fd(socket) => {
                 let socket = socket.lock().map_err(|_| "Mutex poisoned")?;
-                socket.set_filters::<CanFilter>(&[])?;
+                // Utiliser un filtre qui accepte tout (ID=0, Mask=0)
+                let accept_all = vec![CanFilter::new(0x00000000, 0x00000000)];
+                socket.set_filters(&accept_all)?;
             }
         }
         Ok(())
@@ -811,8 +821,10 @@ fn read_frames_batch_optimized(mut cx: FunctionContext) -> JsResult<JsArrayBuffe
 
         // Créer l'ArrayBuffer et copier les données
         let buffer = cx.array_buffer(buffer_data.len())?;
-        let mut buffer_guard = buffer.borrow_mut(&mut cx.lock());
-        buffer_guard.as_mut_slice().copy_from_slice(&buffer_data);
+        {
+            let mut buffer_guard = buffer.borrow_mut(&mut cx);
+            buffer_guard.as_mut_slice(&mut cx).copy_from_slice(&buffer_data);
+        }
 
         Ok(buffer)
     } else {
@@ -827,8 +839,8 @@ fn send_frames_batch_optimized(mut cx: FunctionContext) -> JsResult<JsNumber> {
 
     // Lire le buffer de frames directement
     let frames_data = {
-        let buffer_guard = frames_buffer.borrow(&cx.lock());
-        buffer_guard.as_slice().to_vec()
+        let buffer_guard = frames_buffer.borrow(&cx);
+        buffer_guard.as_slice(&cx).to_vec()
     };
 
     // Désérialiser les frames du buffer (format compact binaire)
@@ -910,8 +922,8 @@ fn send_frame_optimized(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
     // Lire les données directement du buffer
     let data = {
-        let buffer_guard = data_buffer.borrow(&cx.lock());
-        buffer_guard.as_slice().to_vec()
+        let buffer_guard = data_buffer.borrow(&cx);
+        buffer_guard.as_slice(&cx).to_vec()
     };
 
     let registry = SOCKET_REGISTRY.lock().unwrap();
@@ -948,8 +960,8 @@ fn read_frame_optimized(mut cx: FunctionContext) -> JsResult<JsObject> {
                 // Utiliser ArrayBuffer pour les données
                 let data_buffer = cx.array_buffer(data.len())?;
                 {
-                    let mut buffer_guard = data_buffer.borrow_mut(&mut cx.lock());
-                    buffer_guard.as_mut_slice().copy_from_slice(&data);
+                    let mut buffer_guard = data_buffer.borrow_mut(&mut cx);
+                    buffer_guard.as_mut_slice(&mut cx).copy_from_slice(&data);
                 }
 
                 result.set(&mut cx, "id", js_id)?;
@@ -1046,3 +1058,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     Ok(())
 }
+
+// Include test module
+#[cfg(test)]
+mod tests_optimized;

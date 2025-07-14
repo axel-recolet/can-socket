@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod benchmarks {
-    use super::*;
     use crate::CanSocketWrapper;
     use std::time::Instant;
 
@@ -438,5 +437,504 @@ mod benchmarks {
         let _ = std::process::Command::new("sudo")
             .args(&["ip", "link", "delete", interface])
             .output();
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_can_fd_performance() {
+        let interface = "vcan_fd";
+
+        // Créer l'interface de test CAN FD
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+
+        let output = std::process::Command::new("sudo")
+            .args(&["ip", "link", "add", "dev", interface, "type", "vcan"])
+            .output();
+
+        if output.is_ok() {
+            let _ = std::process::Command::new("sudo")
+                .args(&["ip", "link", "set", "up", interface])
+                .output();
+        } else {
+            println!("Skipping CAN FD benchmark - cannot create vcan interface");
+            return;
+        }
+
+        // Test avec socket CAN FD
+        let fd_sender =
+            CanSocketWrapper::new_fd(interface.to_string()).expect("Failed to create FD sender");
+        let fd_receiver =
+            CanSocketWrapper::new_fd(interface.to_string()).expect("Failed to create FD receiver");
+
+        let frame_count = 500;
+        let test_data_small = vec![0x01, 0x02, 0x03, 0x04]; // 4 bytes
+        let test_data_large = vec![0xFF; 64]; // 64 bytes (max CAN FD)
+
+        // Benchmark frames CAN FD petites
+        let start = Instant::now();
+        for i in 0..frame_count {
+            let result =
+                fd_sender.send_frame(0x300 + i, test_data_small.clone(), false, true, false);
+            assert!(result.is_ok(), "CAN FD small frame send should succeed");
+        }
+        let small_fd_duration = start.elapsed();
+
+        // Benchmark frames CAN FD grandes
+        let start = Instant::now();
+        for i in 0..frame_count {
+            let result =
+                fd_sender.send_frame(0x400 + i, test_data_large.clone(), false, true, false);
+            assert!(result.is_ok(), "CAN FD large frame send should succeed");
+        }
+        let large_fd_duration = start.elapsed();
+
+        println!("CAN FD Benchmark Results:");
+        println!(
+            "  Small frames (4 bytes): {} frames in {:?} ({:.2} frames/sec)",
+            frame_count,
+            small_fd_duration,
+            frame_count as f64 / small_fd_duration.as_secs_f64()
+        );
+        println!(
+            "  Large frames (64 bytes): {} frames in {:?} ({:.2} frames/sec)",
+            frame_count,
+            large_fd_duration,
+            frame_count as f64 / large_fd_duration.as_secs_f64()
+        );
+
+        // Test réception CAN FD
+        let mut received_fd = 0;
+        let timeout_start = Instant::now();
+        while received_fd < frame_count * 2 && timeout_start.elapsed().as_millis() < 3000 {
+            if let Ok((_, _, _, is_fd, _, _)) = fd_receiver.read_frame(Some(50)) {
+                if is_fd {
+                    received_fd += 1;
+                }
+            }
+        }
+
+        println!(
+            "  CAN FD frames received: {}/{}",
+            received_fd,
+            frame_count * 2
+        );
+
+        // Nettoyer
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_filter_operations() {
+        let interface = "vcan_filter_ops";
+
+        // Créer l'interface de test
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+
+        let output = std::process::Command::new("sudo")
+            .args(&["ip", "link", "add", "dev", interface, "type", "vcan"])
+            .output();
+
+        if output.is_ok() {
+            let _ = std::process::Command::new("sudo")
+                .args(&["ip", "link", "set", "up", interface])
+                .output();
+        } else {
+            println!("Skipping filter operations benchmark");
+            return;
+        }
+
+        let socket = CanSocketWrapper::new(interface.to_string()).expect("Failed to create socket");
+
+        // Benchmark set_filters
+        let filters = vec![
+            (0x100, 0x7FF, false),
+            (0x200, 0x7FF, false),
+            (0x300, 0x7FF, false),
+        ];
+
+        let start = Instant::now();
+        for _ in 0..1000 {
+            let result = socket.set_filters(filters.clone());
+            assert!(result.is_ok(), "set_filters should succeed");
+        }
+        let set_filters_duration = start.elapsed();
+
+        // Benchmark clear_filters
+        let start = Instant::now();
+        for _ in 0..1000 {
+            let result = socket.clear_filters();
+            assert!(result.is_ok(), "clear_filters should succeed");
+        }
+        let clear_filters_duration = start.elapsed();
+
+        println!("Filter Operations Benchmark Results:");
+        println!(
+            "  set_filters: 1000 operations in {:?} ({:.2} ops/sec)",
+            set_filters_duration,
+            1000.0 / set_filters_duration.as_secs_f64()
+        );
+        println!(
+            "  clear_filters: 1000 operations in {:?} ({:.2} ops/sec)",
+            clear_filters_duration,
+            1000.0 / clear_filters_duration.as_secs_f64()
+        );
+
+        // Test close
+        let start = Instant::now();
+        let result = socket.close();
+        let close_duration = start.elapsed();
+        assert!(result.is_ok(), "close should succeed");
+
+        println!("  close: {:?}", close_duration);
+
+        // Nettoyer
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_batch_operations() {
+        let interface = "vcan_batch";
+
+        // Créer l'interface de test
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+
+        let output = std::process::Command::new("sudo")
+            .args(&["ip", "link", "add", "dev", interface, "type", "vcan"])
+            .output();
+
+        if output.is_ok() {
+            let _ = std::process::Command::new("sudo")
+                .args(&["ip", "link", "set", "up", interface])
+                .output();
+        } else {
+            println!("Skipping batch operations benchmark");
+            return;
+        }
+
+        let sender = CanSocketWrapper::new(interface.to_string()).expect("Failed to create sender");
+        let receiver =
+            CanSocketWrapper::new(interface.to_string()).expect("Failed to create receiver");
+
+        let batch_size = 100;
+        let test_data = vec![0xAA, 0xBB, 0xCC, 0xDD];
+
+        // Simuler send_frames_batch en envoyant plusieurs frames d'affilée
+        let start = Instant::now();
+        for batch in 0..10 {
+            for i in 0..batch_size {
+                let id = (batch * batch_size + i) as u32;
+                let result = sender.send_frame(id, test_data.clone(), false, false, false);
+                assert!(result.is_ok(), "Batch send should succeed");
+            }
+        }
+        let batch_send_duration = start.elapsed();
+
+        // Simuler read_frames_batch en lisant plusieurs frames d'affilée
+        let start = Instant::now();
+        let mut total_received = 0;
+        let mut consecutive_timeouts = 0;
+
+        while total_received < 1000 && consecutive_timeouts < 10 {
+            let mut batch_received = 0;
+            for _ in 0..batch_size {
+                match receiver.read_frame(Some(10)) {
+                    Ok(_) => {
+                        batch_received += 1;
+                        consecutive_timeouts = 0;
+                    }
+                    Err(_) => {
+                        consecutive_timeouts += 1;
+                        break;
+                    }
+                }
+            }
+            total_received += batch_received;
+            if batch_received == 0 {
+                break;
+            }
+        }
+        let batch_read_duration = start.elapsed();
+
+        println!("Batch Operations Benchmark Results:");
+        println!(
+            "  Batch send (10 batches of {} frames): {:?} ({:.2} frames/sec)",
+            batch_size,
+            batch_send_duration,
+            1000.0 / batch_send_duration.as_secs_f64()
+        );
+        println!(
+            "  Batch read ({} frames): {:?} ({:.2} frames/sec)",
+            total_received,
+            batch_read_duration,
+            total_received as f64 / batch_read_duration.as_secs_f64()
+        );
+
+        // Nettoyer
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_socket_lifecycle() {
+        let interface = "vcan_lifecycle";
+
+        // Créer l'interface de test
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+
+        let output = std::process::Command::new("sudo")
+            .args(&["ip", "link", "add", "dev", interface, "type", "vcan"])
+            .output();
+
+        if output.is_ok() {
+            let _ = std::process::Command::new("sudo")
+                .args(&["ip", "link", "set", "up", interface])
+                .output();
+        } else {
+            println!("Skipping socket lifecycle benchmark");
+            return;
+        }
+
+        // Benchmark création/fermeture de sockets
+        let socket_count = 100;
+
+        // Test création de sockets CAN normaux
+        let start = Instant::now();
+        let mut sockets = Vec::new();
+        for _ in 0..socket_count {
+            let socket = CanSocketWrapper::new(interface.to_string());
+            assert!(socket.is_ok(), "Socket creation should succeed");
+            sockets.push(socket.unwrap());
+        }
+        let creation_duration = start.elapsed();
+
+        // Test fermeture de sockets
+        let start = Instant::now();
+        for socket in sockets {
+            let result = socket.close();
+            assert!(result.is_ok(), "Socket close should succeed");
+        }
+        let close_duration = start.elapsed();
+
+        // Test création de sockets CAN FD
+        let start = Instant::now();
+        let mut fd_sockets = Vec::new();
+        for _ in 0..socket_count {
+            let socket = CanSocketWrapper::new_fd(interface.to_string());
+            assert!(socket.is_ok(), "FD Socket creation should succeed");
+            fd_sockets.push(socket.unwrap());
+        }
+        let fd_creation_duration = start.elapsed();
+
+        // Test fermeture de sockets FD
+        let start = Instant::now();
+        for socket in fd_sockets {
+            let result = socket.close();
+            assert!(result.is_ok(), "FD Socket close should succeed");
+        }
+        let fd_close_duration = start.elapsed();
+
+        println!("Socket Lifecycle Benchmark Results:");
+        println!(
+            "  CAN socket creation: {} sockets in {:?} ({:.2} ops/sec)",
+            socket_count,
+            creation_duration,
+            socket_count as f64 / creation_duration.as_secs_f64()
+        );
+        println!(
+            "  CAN socket close: {} sockets in {:?} ({:.2} ops/sec)",
+            socket_count,
+            close_duration,
+            socket_count as f64 / close_duration.as_secs_f64()
+        );
+        println!(
+            "  CAN FD socket creation: {} sockets in {:?} ({:.2} ops/sec)",
+            socket_count,
+            fd_creation_duration,
+            socket_count as f64 / fd_creation_duration.as_secs_f64()
+        );
+        println!(
+            "  CAN FD socket close: {} sockets in {:?} ({:.2} ops/sec)",
+            socket_count,
+            fd_close_duration,
+            socket_count as f64 / fd_close_duration.as_secs_f64()
+        );
+
+        // Nettoyer
+        let _ = std::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", interface])
+            .output();
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_buffer_pool_performance() {
+        let interface = "vcan0";
+
+        // Créer des sockets de test
+        let sender = CanSocketWrapper::new(interface.to_string()).expect("Failed to create sender");
+        let receiver =
+            CanSocketWrapper::new(interface.to_string()).expect("Failed to create receiver");
+
+        // Vider le buffer
+        while let Ok(_) = receiver.read_frame(Some(5)) {}
+
+        // Test de performance : envoyer et recevoir des frames avec délai réaliste
+        let num_frames = 100; // Réduire le nombre pour plus de stabilité
+        let test_data = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+
+        println!(
+            "🚀 Test de performance du pool de buffers - {} frames",
+            num_frames
+        );
+
+        let start_time = Instant::now();
+
+        // Envoyer et recevoir alternativement pour éviter la surcharge du buffer
+        let mut received = 0;
+        for i in 0..num_frames {
+            let id = 0x100 + (i % 50); // Varier les IDs
+
+            // Envoyer
+            let _ = sender.send_frame(id, test_data.clone(), false, false, false);
+
+            // Essayer de recevoir immédiatement
+            match receiver.read_frame(Some(50)) {
+                Ok(_) => received += 1,
+                Err(_) => {
+                    // Si pas de frame dispo, réessayer avec timeout plus long
+                    match receiver.read_frame(Some(100)) {
+                        Ok(_) => received += 1,
+                        Err(_) => {} // Frame perdue, continuer
+                    }
+                }
+            }
+        }
+
+        let elapsed = start_time.elapsed();
+        let frames_per_sec = (received as f64) / elapsed.as_secs_f64();
+
+        println!("✅ Pool de buffers actif:");
+        println!("   Frames reçues: {}/{}", received, num_frames);
+        println!("   Temps total: {:?}", elapsed);
+        println!("   Throughput: {:.0} frames/sec", frames_per_sec);
+        println!(
+            "   Latence moyenne: {:.2} µs/frame",
+            elapsed.as_micros() as f64 / received as f64
+        );
+
+        // Vérifier un throughput minimum acceptable (plus réaliste)
+        assert!(
+            frames_per_sec > 500.0,
+            "Performance too low: {} frames/sec",
+            frames_per_sec
+        );
+        assert!(
+            received >= num_frames * 70 / 100,
+            "Too many lost frames: {}/{}",
+            received,
+            num_frames
+        );
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn benchmark_buffer_pool_memory_efficiency() {
+        let interface = "vcan0";
+        let receiver =
+            CanSocketWrapper::new(interface.to_string()).expect("Failed to create receiver");
+        let sender = CanSocketWrapper::new(interface.to_string()).expect("Failed to create sender");
+
+        // Test de l'efficacité mémoire avec différentes tailles de données
+        let test_sizes = vec![1, 4, 8, 16, 32, 64]; // Différentes tailles de payload
+
+        for &size in &test_sizes {
+            let test_data = vec![0xFF; size];
+            let num_iterations = 100;
+
+            let start_time = Instant::now();
+
+            for i in 0..num_iterations {
+                let id = 0x200 + i;
+                let _ = sender.send_frame(id, test_data.clone(), false, false, false);
+
+                // Lire immédiatement pour tester l'allocation/déallocation
+                let _ = receiver.read_frame(Some(50));
+            }
+
+            let elapsed = start_time.elapsed();
+            println!(
+                "📊 Taille {} bytes: {:.2} µs/operation",
+                size,
+                elapsed.as_micros() as f64 / num_iterations as f64
+            );
+        }
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn test_buffer_pool_functionality() {
+        let interface = "vcan0";
+        let sender = CanSocketWrapper::new(interface.to_string()).expect("Failed to create sender");
+        let receiver =
+            CanSocketWrapper::new(interface.to_string()).expect("Failed to create receiver");
+
+        // Vider le buffer
+        while let Ok(_) = receiver.read_frame(Some(5)) {}
+
+        println!("🧪 Test de fonctionnalité du pool de buffers");
+
+        // Envoyer quelques frames de tailles différentes
+        let test_cases = vec![
+            (0x101, vec![0x01]),                                           // 1 byte
+            (0x102, vec![0x01, 0x02, 0x03, 0x04]),                         // 4 bytes
+            (0x103, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]), // 8 bytes (max CAN)
+        ];
+
+        for (id, data) in test_cases {
+            println!("  Test frame ID=0x{:X}, size={} bytes", id, data.len());
+
+            // Envoyer
+            let send_result = sender.send_frame(id, data.clone(), false, false, false);
+            assert!(send_result.is_ok(), "Failed to send frame ID=0x{:X}", id);
+
+            // Recevoir
+            match receiver.read_frame(Some(500)) {
+                Ok((recv_id, recv_data, extended, is_fd, is_remote, is_error)) => {
+                    assert_eq!(recv_id, id, "ID mismatch");
+                    assert_eq!(recv_data, data, "Data mismatch for ID=0x{:X}", id);
+                    assert!(!extended, "Should not be extended");
+                    assert!(!is_fd, "Should not be FD");
+                    assert!(!is_remote, "Should not be remote");
+                    assert!(!is_error, "Should not be error");
+                    println!("    ✅ Frame reçue correctement");
+                }
+                Err(e) => panic!("Failed to receive frame ID=0x{:X}: {}", id, e),
+            }
+        }
+
+        println!("✅ Test de fonctionnalité du pool terminé avec succès");
     }
 }
